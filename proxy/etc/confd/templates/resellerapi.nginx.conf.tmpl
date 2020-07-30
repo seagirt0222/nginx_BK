@@ -1,0 +1,182 @@
+# start template{{range $dir := ls "/domain"}}{{$type := printf "/type/%s" $dir}}{{$ssl := printf "/ssl/%s" $dir}}
+
+# {{base $dir}} 
+upstream {{base $dir}} { 
+	#ip_hash;
+	# load balence {{$custdir := printf "/upstream/%s/*" $dir}}{{range gets $custdir}}
+	server {{.Value}} max_fails=5  fail_timeout=60s;{{end}}
+}
+
+server{
+    {{if exists $ssl}}
+    {{if eq (getv $ssl) "true"}}
+    listen 80;
+    listen 443 ssl;
+    include /etc/nginx/ssl.conf;
+    ssl_certificate {{$etcd_cert := printf "/ssl/%s/cert" $dir}}{{getv $etcd_cert}};
+    ssl_certificate_key {{$etcd_cert_key := printf "/ssl/%s/cert_key" $dir}}{{getv $etcd_cert_key}};
+    {{end}}
+    {{ else }}
+    listen 80;
+    {{end}}    
+    # url admin.gjsoft.co(d) => admin.local.domain
+    server_name {{$domain := printf "/domain/%s" $dir}}{{getv $domain}};
+
+    #access_log /var/log/nginx/{{base $dir}}.access.log main;
+    
+    #for docker use
+    resolver 127.0.0.11;
+    
+    # local doamin {{$etcd_domain_local := printf "/domain/%s/local" $dir}}
+    set $domain {{toLower (getv $etcd_domain_local)}};
+
+    #proxy_set_header Host $host;{{$etcd_header_keys := printf "/header/%s/*" $dir}}{{range gets $etcd_header_keys}}
+    proxy_set_header {{base .Key}} {{.Value}};{{end}}
+
+    proxy_set_header X-Real-IP  $remote_addr;
+    proxy_set_header X-Forwarded-For $remote_addr;
+    proxy_set_header X-Request-Id $request_id;
+
+    #replace admin.gjsoft.local => admin.gjsoft.co(dev)
+    proxy_redirect ~*(.+)\.$domain  $host;
+    #proxy_redirect default;
+
+    #replace conten url
+    sub_filter_types *;
+    # start cdn {{$confd_cdndomain := printf "/subfilter/%s/*" $dir }} {{range gets  $confd_cdndomain }}
+    sub_filter /{{base .Key}}   '//{{.Value}}'; {{end}}
+    # end cdn
+    sub_filter_once off;
+
+    # access control - allow {{$etcd_allow := printf "/ipallow/%s/*" $dir}}{{range gets $etcd_allow}}
+    allow {{.Value}};{{end}}
+    allow 172.24.0.0/16;
+    allow 10.85.4.0/24;
+    allow 10.85.3.0/24;
+    allow 59.125.119.35;
+    allow 103.96.3.211;
+    
+    # access control - deny {{$etcd_deny := printf "/ipdeny/%s/*" $dir}}{{range gets $etcd_deny}}
+    deny {{.Value}};{{end}}
+    deny all;
+
+    location / {
+        proxy_cookie_domain $domain $host;
+        proxy_pass http://{{base $dir}};
+    }
+
+    location /V1/Report/GetGbSportOptionInfo {
+        proxy_cookie_domain $domain $host;
+        limit_req zone=ReportGetGbSportOptionInfo ;
+        proxy_pass http://{{base $dir}};
+    }
+
+    location /V1/Report/GetGbSportTeamInfo {
+        proxy_cookie_domain $domain $host;
+        limit_req zone=ReportGetGbSportTeamInfo ;
+        proxy_pass http://{{base $dir}};
+    }
+
+    location /V1/Report/GetGbSportOutrightTeamInfo {
+        proxy_cookie_domain $domain $host;
+        limit_req zone=ReportGetGbSportOutrightTeamInfo ;
+        proxy_pass http://{{base $dir}};
+    }
+
+    location /V1/Account/Token {
+        proxy_cookie_domain $domain $host;
+        limit_req zone=AccountToken ;
+        proxy_pass http://{{base $dir}};
+    }
+
+    location /V1/Game/Login  {
+        proxy_cookie_domain $domain $host;
+        limit_req zone=GameLogin;
+        proxy_pass http://{{base $dir}};
+    }
+
+    location /V1/Game/LoginTrial  {
+        proxy_cookie_domain $domain $host;
+        limit_req zone=GameLoginTrial;
+        proxy_pass http://{{base $dir}};
+    }
+
+    location /V1/Game/Logout  {
+        proxy_cookie_domain $domain $host;
+        limit_req zone=GameLogout;
+        proxy_pass http://{{base $dir}};
+    }
+
+    location /V1/Member/CreateMember  {
+        proxy_cookie_domain $domain $host;
+        limit_req zone=MemberCreateMember;
+        proxy_pass http://{{base $dir}};
+    }
+
+    location /V1/Member/GetMember  {
+        proxy_cookie_domain $domain $host;
+        limit_req zone=MemberGetMember;
+        proxy_pass http://{{base $dir}};
+    }
+
+    location /V1/Member/GetBalance  {
+        proxy_cookie_domain $domain $host;
+        limit_req zone=MemberGetBalance;
+        proxy_pass http://{{base $dir}};
+    }
+
+    location /V1/Member/Transfer  {
+        proxy_cookie_domain $domain $host;
+        limit_req zone=MemberTransfer;
+        proxy_pass http://{{base $dir}};
+    }
+
+    location /V1/Report/CheckTransfer  {
+        proxy_cookie_domain $domain $host;
+        limit_req zone=ReportCheckTransfer;
+        proxy_pass http://{{base $dir}};
+    }
+
+    location /V1/Report/GetGbSportBetRecord  {
+        proxy_cookie_domain $domain $host;
+        limit_req zone=ReportGetGbSportBetRecord;
+        proxy_pass http://{{base $dir}};
+    }
+
+    location /V1/Report/GetGbSportCodeInfo  {
+        proxy_cookie_domain $domain $host;
+        limit_req zone=ReportGetGbSportCodeInfo;
+        proxy_pass http://{{base $dir}};
+    }
+
+    location /V1/Report/GetGbSportGroupOptionInfo  {
+        proxy_cookie_domain $domain $host;
+        limit_req zone=ReportGetGbSportGroupOptionInfo;
+        proxy_pass http://{{base $dir}};
+    }
+
+    location /V1/Report/GetGbSportMatchInfo  {
+        proxy_cookie_domain $domain $host;
+        limit_req zone=ReportGetGbSportMatchInfo;
+        proxy_pass http://{{base $dir}};
+    }
+
+    location /V1/Report/GetGbSportOddsMarketTypeInfo  {
+        proxy_cookie_domain $domain $host;
+        limit_req zone=ReportGetGbSportOddsMarketTypeInfo;
+        proxy_pass http://{{base $dir}};
+    }
+
+    location /V1/Report/GetGbSportTournamentInfo  {
+        proxy_cookie_domain $domain $host;
+        limit_req zone=ReportGetGbSportTournamentInfo;
+        proxy_pass http://{{base $dir}};
+    }
+
+    location /V1/Report/GetBetRecord  {
+        proxy_cookie_domain $domain $host;
+        limit_req zone=ReportGetBetRecord;
+        proxy_pass http://{{base $dir}};
+    }    
+}
+{{end}}# end template

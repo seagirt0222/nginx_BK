@@ -1,0 +1,185 @@
+# start template {{range $dir := ls "/domain"}} {{$type := printf "/type/%s" $dir}}{{$confd_maintain := printf "/maintain/%s" $dir}}{{$confd_maintain_url := printf "/maintain/%s/url" $dir}}{{$ssl := printf "/ssl/%s" $dir}}{{$systemcode := printf "/systemCode/%s" $dir}}{{$block := printf "/block/url"}}
+
+
+# {{getv $type}} {{base $dir}} 
+upstream {{getv $type}}_{{base $dir}} { 
+	#ip_hash;
+	# load balence {{$custdir := printf "/upstream/%s/*" $dir}}{{range gets $custdir}}
+	server {{.Value}} max_fails=5  fail_timeout=60s;{{end}}
+}
+{{$ipdir := printf "/ipwhitelist/%s/*" $dir}}
+map $remote_addr $Ip{{$dir}} {
+     default 0;
+     59.125.119.35 1;
+     103.96.3.211 1;
+     {{range gets $ipdir}}
+     {{.Value}} 1;
+     {{end}}
+     }
+
+map $http_x_forwarded_for $xforwardedfor{
+    ""  $remote_addr;
+    default $http_x_forwarded_for;
+}
+
+server{
+    {{if exists $ssl}}
+    {{if eq (getv $ssl) "true"}}
+        listen 80;
+        listen 443 ssl;
+        include /etc/nginx/ssl.conf;
+        ssl_certificate {{$etcd_cert := printf "/ssl/%s/cert" $dir}}{{getv $etcd_cert}};
+        ssl_certificate_key {{$etcd_cert_key := printf "/ssl/%s/cert_key" $dir}}{{getv $etcd_cert_key}};
+    {{end}}
+    {{ else }}
+        listen 80;
+    {{end}}    
+    # url admin.gjsoft.co(d) => admin.local.domain
+    server_name {{$domain := printf "/domain/%s" $dir}}{{getv $domain}};
+
+    include  /etc/nginx/gzip.conf;
+
+
+    #access_log /var/log/nginx/{{base $dir}}.{{getv $type}}.access.log main;
+    
+    # for docker use
+    resolver 127.0.0.11;
+    
+    # local doamin {{$etcd_domain_local := printf "/domain/%s/local" $dir}}
+    set $domain {{toLower (getv $etcd_domain_local)}};
+
+    # proxy_set_header Host $host;{{$etcd_header_keys := printf "/header/%s/*" $dir}}{{range gets $etcd_header_keys}}
+    proxy_set_header {{base .Key}} {{.Value}};{{end}}
+
+    proxy_set_header X-Real-IP  $http_x_real_ip;
+    proxy_set_header X-Forwarded-For $xforwardedfor;
+    proxy_set_header X-Request-Id $request_id;
+    proxy_set_header Accept-Encoding '';
+
+    # replace admin.gjsoft.local => admin.gjsoft.co(dev)
+    proxy_redirect ~*(.+)\.$domain  $host;
+    #proxy_redirect default;
+
+    # replace conten url
+    sub_filter_types *;
+    # start cdn {{$confd_cdndomain := printf "/subfilter/%s/*" $dir }} {{range gets  $confd_cdndomain }}
+    sub_filter /{{base .Key}}   '//{{.Value}}'; {{end}}
+    # end cdn
+    sub_filter_once off;
+
+    # maintain {{ if exists $confd_maintain }}{{if eq (getv $confd_maintain) "true"}}
+    rewrite ^/$ {{ getv $confd_maintain_url }} redirect; {{ end }}{{ end }}
+
+    # access control - allow {{$etcd_allow := printf "/ipallow/%s/*" $dir}}{{range gets $etcd_allow}}
+    allow {{.Value}};{{end}}
+    allow 59.125.119.35;
+    allow 103.96.3.211;
+    allow 10.85.3.0/24;
+    allow 10.85.4.0/24;
+    allow 172.24.0.0/16;
+
+    # access control - deny {{$etcd_deny := printf "/ipdeny/%s/*" $dir}}{{range gets $etcd_deny}}
+    deny {{.Value}};{{end}}
+{{$countrydir := printf "/Country/%s/*" $dir}}{{$getcountry := getvs $countrydir}}
+    location / {
+
+        include  /etc/nginx/gzip.conf;
+
+	 # replace cookie domain .local to co(dev)
+        if ($Ip{{$dir}} = 1) {
+            break;
+        }
+        {{if  $getcountry}}
+        if ($geoip_country_code ~ "({{join $getcountry "|"}})") {
+           return 403;
+        }
+
+        {{end}}
+
+        # replace cookie domain .local to co(dev)
+        proxy_cookie_domain $domain $host;
+
+	    proxy_pass http://{{getv $type}}_{{base $dir}};
+    }
+{{$types := getv $type}}
+{{if eq $types "master"}}
+
+    location = /Home/Contact {
+        proxy_connect_timeout 600s;
+        proxy_read_timeout 600s;
+        proxy_send_timeout 600s;
+        send_timeout 600s;
+        proxy_pass http://{{getv $type}}_{{base $dir}};
+    }
+
+    location = /BetRecord/AdvancedExport {
+        proxy_connect_timeout 600s;
+        proxy_read_timeout 600s;
+        proxy_send_timeout 600s;
+        send_timeout 600s;
+        proxy_pass http://{{getv $type}}_{{base $dir}};
+    }  
+{{end}}
+    location /signalr {
+	    #請勿移除下列重覆資料，否將造成ip無法正確帶入
+        proxy_set_header X-Real-IP  $http_x_real_ip;
+        proxy_set_header X-Forwarded-For $xforwardedfor;
+        proxy_set_header X-Request-Id $request_id;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-ClientCountryCode $geoip_country_code;
+        proxy_set_header Accept-Encoding '';
+
+        add_header signalr true;
+        #{{$host_header := printf "/header/%s/Host" $dir }}
+        proxy_set_header Host {{getv $host_header}};
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_pass http://{{getv $type}}_{{base $dir}};
+    }
+
+{{if eq $types "cdn"}}
+    #location ~* /Web.Mobile/_Common/Content/((?!views).)* {
+    location ~* /Web.(Mobile|Portal)/_Common/(Scripts/.*|Content/(?!Views).*) {
+
+        include  /etc/nginx/gzip.conf;
+
+        add_header Cache-Control private;
+        add_header Cache-Control max-age=31536000;
+
+        proxy_pass http://{{getv $type}}_{{base $dir}};
+    }
+{{end}}
+    
+     location ~* \.(?:jpg|jpeg|gif|png|ico|cur|gz|svg|svgz|mp4|ogg|ogv|webm|htc|js|css|ttf|woff|woff2|mov)$ {
+
+        include  /etc/nginx/gzip.conf;
+ 
+        proxy_cache my_cache;
+        proxy_cache_valid  200 304 301 302 10d;
+        proxy_cache_valid  404 1m;
+        proxy_cache_valid  any 1d;
+        proxy_cache_key $host$request_uri;
+        proxy_pass http://{{getv $type}}_{{base $dir}};
+     }
+    location ~ /.well-known/acme-challenge/ {
+        allow all;
+        root /data/webroot;
+    }
+
+    location ~* \.(?:php|exe|asp|jsp|do)$ {
+        add_header IP $remote_addr;
+        {{if exists $block }}
+            {{if eq (getv $block) ""}}
+                return 403;
+            {{ else }}
+                set $urls '{{getv $block}}/$remote_addr';
+                proxy_pass $urls;
+            {{ end }}
+        {{ else }}
+            return 403;
+        {{ end }}  
+    }
+}
+{{end}}# end template

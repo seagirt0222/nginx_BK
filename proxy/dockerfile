@@ -1,0 +1,25 @@
+FROM nginx:1.17.3-alpine
+
+ARG entrypoint
+
+RUN rm /etc/nginx/conf.d/*
+
+RUN mkdir -p /etc/nginx/html && \
+    mkdir -p /var/nginx/cache && \
+    mkdir -p /var/log/nginx && \
+    mkdir -p /etc/confd/conf.d && \
+    mkdir -p /code
+
+COPY etc/ /etc/
+COPY usr/ /usr/
+COPY code/ /code/
+
+# Define working directory.
+WORKDIR /etc/nginx
+
+# Define default command.
+#CMD ["nginx", "-g", "daemon off;"]
+ENTRYPOINT ["/code/entrypoint.sh"]
+
+# Expose ports.
+EXPOSE 80 443

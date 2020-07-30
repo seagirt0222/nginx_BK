@@ -1,0 +1,26 @@
+# start template {{range $dir := ls "/domain"}} {{$ssl := printf "/ssl/%s" $dir}}{{$confd_maintain := printf "/maintain/%s" $dir}}{{$confd_maintain_url := printf "/maintain/%s/url" $dir}}
+
+server{
+{{if exists $ssl}}
+    {{if eq (getv $ssl) "true"}}
+    listen 80;
+    listen 443 ssl;
+    include /etc/nginx/ssl.conf;
+    ssl_certificate {{$etcd_cert := printf "/ssl/%s/cert" $dir}}{{getv $etcd_cert}};
+    ssl_certificate_key {{$etcd_cert_key := printf "/ssl/%s/cert_key" $dir}}{{getv $etcd_cert_key}};
+    {{end}}
+{{ else }}
+    listen 80;
+{{end}}
+    
+    # maintain {{ if exists $confd_maintain }}{{if eq (getv $confd_maintain) "true"}}
+    rewrite ^/$ {{ getv $confd_maintain_url }} redirect; {{ end }}{{ end }}
+
+
+    #url admin.gjsoft.co(d) => admin.local.domain
+    server_name {{$domain := printf "/domain/%s" $dir}}{{getv $domain}};{{$confd_redirect_url := printf "/redirect/%s/to" $dir}}{{$confd_redirect_code := printf "/redirect/%s/code" $dir}}
+    
+    #access_log /var/log/nginx/{{base $dir}}.access.log main;
+    return {{getv $confd_redirect_code}} {{getv $confd_redirect_url}}; 
+}
+{{end}}# end template

@@ -1,0 +1,82 @@
+# start template
+{{range $dir := ls "/domain"}}{{$type := printf "/type/%s" $dir}}{{$confd_maintain := printf "/maintain/%s" $dir}}{{$confd_maintain_url := printf "/maintain/%s/url" $dir}}{{$systemcode := printf "/systemCode/%s" $dir}}
+
+# {{base $dir}} 
+upstream {{base $dir}} { 
+	#ip_hash;
+	# load balence {{$custdir := printf "/upstream/%s/*" $dir}}{{range gets $custdir}}
+	server {{.Value}};{{end}}
+}
+
+server{
+    listen 80;
+    
+    #url admin.gjsoft.co(d) => admin.local.domain
+    server_name {{$domain := printf "/domain/%s" $dir}}{{getv $domain}};
+
+    #access_log /var/log/nginx/{{base $dir}}.access.log main;
+    
+    #for docker use
+    resolver 127.0.0.11;
+    
+    # local doamin {{$etcd_domain_local := printf "/domain/%s/local" $dir}}
+    set $domain {{toLower (getv $etcd_domain_local)}};
+
+    #proxy_set_header Host $host;{{$etcd_header_keys := printf "/header/%s/*" $dir}}{{range gets $etcd_header_keys}}
+    proxy_set_header {{base .Key}} {{.Value}};{{end}}
+
+    proxy_set_header X-Real-IP  $remote_addr;
+    proxy_set_header X-Forwarded-For $remote_addr;
+    proxy_set_header X-Request-Id $request_id;
+
+    #replace admin.gjsoft.local => admin.gjsoft.co(dev)
+    proxy_redirect ~*(.+)\.$domain  $host;
+    #proxy_redirect default;
+
+    #replace conten url
+    sub_filter_types *;
+    # start cdn {{$confd_cdndomain := printf "/subfilter/%s/*" $dir }} {{range gets  $confd_cdndomain }}
+    sub_filter /{{base .Key}}   '//{{.Value}}'; {{end}}
+    # end cdn
+    sub_filter_once off;
+
+    # maintain{{ if exists $confd_maintain }}{{if eq (getv $confd_maintain) "true"}}
+    rewrite ^/$ {{ getv $confd_maintain_url }} redirect; {{ end }}{{ end }}
+
+    location / {
+        #replace cookie domain .local to co(dev)
+        proxy_cookie_domain $domain $host;
+
+        proxy_pass http://{{base $dir}};
+    }
+    
+    location /signalr {
+	    #請勿移除下列重覆資料，否將造成ip無法正確帶入
+        proxy_set_header X-Real-IP  $remote_addr;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Request-Id $request_id;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-ClientCountryCode $geoip_country_code;
+        proxy_set_header Accept-Encoding '';
+
+        add_header signalr true;
+        #{{$host_header := printf "/header/%s/Host" $dir }}
+        proxy_set_header Host {{getv $host_header}};
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_pass http://{{base $dir}};
+    }
+
+    # location ~* \.(?:jpg|jpeg|gif|png|ico|cur|gz|svg|svgz|mp4|ogg|ogv|webm|htc|js|css|ttf|woff|woff2)$ {
+    #     add_header Cache-Control "private";
+
+    #     proxy_cache my_cache;
+    #     proxy_cache_valid  200 304 301 302 10d;
+    #     proxy_cache_valid  any 1d;
+    #     proxy_cache_key $host$request_uri;
+    #	  proxy_pass http://_{{base $dir}}
+    # }
+}
+{{end}}# end template
