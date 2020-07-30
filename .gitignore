@@ -1,0 +1,7 @@
+.vscode/settings.json
+.env
+import.sh
+.env-debug
+/*.bak
+log/
+test_result/

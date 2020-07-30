@@ -1,0 +1,24 @@
+---
+version: '3'
+
+services: 
+  proxy_check:
+    build: proxy
+    image: nginx_proxy:check
+    container_name: ${container_name}
+    hostname: ${container_name}
+    env_file:
+      - .env-debug 
+    environment:
+      - NGINX_PROXY_PROTOCOL
+    logging:
+        driver: syslog
+        options:
+            syslog-address: "udp://filebeat.gjsoft.local:5140"
+    ports:
+        - "${nginx_http}:80"
+        - "${nginx_https}:443"
+    volumes:
+        #- ./log/debug:/var/log/nginx
+        - ./data:/data
+        - /etc/letsencrypt:/etc/letsencrypt

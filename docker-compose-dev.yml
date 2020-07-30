@@ -1,0 +1,46 @@
+---
+version: '2'
+
+services: 
+  proxy_dev:
+    build: proxy
+    image: nginx_proxy:dev
+    container_name: nginx_proxy_dev
+    networks:
+        etcd_net:
+            ipv4_address: 172.16.238.21
+    environment:
+      - NGINX_APP_HTTPS_PORT
+      - ETCDCTL_ENDPOINTS=http://172.16.238.10:2379
+      - ETCDCTL_API=3
+    env_file:
+      - .env 
+    dns:
+      - 127.0.0.11
+    # logging:
+    #     driver: syslog
+    #     options:
+    #         syslog-address: "udp://127.0.0.1:5140"
+    ports:
+        - "80:80"
+        - "443:443"
+    volumes:
+      - ${PWD}/data:/data
+      - ${PWD}/test_result/nginx/conf.d:/etc/nginx/conf.d
+  etcd0:
+    extends:
+        file: etcd-service.yml
+        service: etcd0
+    networks:
+        etcd_net:
+            ipv4_address: 172.16.238.10
+volumes:
+    etcd0:
+networks:
+  etcd_net:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+      - subnet: 172.16.238.0/24
+        gateway: 172.16.238.1

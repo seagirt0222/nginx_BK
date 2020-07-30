@@ -1,0 +1,18 @@
+---
+version: '2'
+
+services: 
+  proxy_haproxy:
+    image: nginx_proxy:latest
+    container_name: nginx_proxy_ha_1
+    restart: always
+    environment:
+      - NGINX_PROXY_PROTOCOL=true
+    env_file:
+      - .env 
+    ports:
+      - "1080:80"
+      - "1443:443"
+    volumes:
+      - ./data:/data
+      - /etc/letsencrypt:/etc/letsencrypt

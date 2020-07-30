@@ -1,0 +1,24 @@
+---
+version: '2'
+
+services: 
+  proxy:
+    image: nginx_proxy:latest
+    container_name: ${container_name}
+    restart: always
+    env_file:
+      - .env 
+       #logging:
+       #driver: syslog
+       #options:
+       #syslog-address: "udp://filebeat.gjsoft.local:5140"
+
+    ports:
+        - "${nginx_http}:80"
+        - "${nginx_https}:443"
+    volumes:
+        - ./data:/data
+        - /etc/letsencrypt:/etc/letsencrypt
+        #- /var/log/nginx:/var/log/nginx
+        - /var/webroot:/var/webroot
+
